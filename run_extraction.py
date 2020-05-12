@@ -255,6 +255,7 @@ def main(_):
     if not tf.gfile.Exists(FLAGS.train_feature_file):
         raise Exception("Train tf-record missed...")
     cnt = 0
+    records = tf.python_io.tf_record_iterator(FLAGS.train_feature_file)
     for _ in records:
         cnt += 1
     print(cnt)
