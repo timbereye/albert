@@ -10,8 +10,8 @@ predict_feature_left_file_gs=$output_root"/features/tf.record.dev.1"
 predict_feature_left_file_gs=$output_root"/features/predict_feature_left_file"
 init_checkpoint_gs=$pretrained_models"/model.ckpt-best"
 vocab_file_gs=$pretrained_models"/vocab_chinese.txt"
-
-python3 run_squad_v2.py \
+export PYTHONPATH="../":$PYTHONPATH
+python3 run_extraction.py \
   --albert_config_file=$albert_config_file_gs \
   --output_dir=$output_dir_gs \
   --train_file=$train_file_gs \
