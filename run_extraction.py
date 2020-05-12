@@ -183,14 +183,14 @@ def validate_flags_or_throw(albert_config):
     if not FLAGS.do_train and not FLAGS.do_predict:
         raise ValueError("At least one of `do_train` or `do_predict` must be True.")
 
-    if FLAGS.do_train:
-        if not FLAGS.train_file:
-            raise ValueError(
-                "If `do_train` is True, then `train_file` must be specified.")
+    # if FLAGS.do_train:
+    #     if not FLAGS.train_file:
+    #         raise ValueError(
+    #             "If `do_train` is True, then `train_file` must be specified.")
     if FLAGS.do_predict:
-        if not FLAGS.predict_file:
-            raise ValueError(
-                "If `do_predict` is True, then `predict_file` must be specified.")
+        # if not FLAGS.predict_file:
+        #     raise ValueError(
+        #         "If `do_predict` is True, then `predict_file` must be specified.")
         if not FLAGS.predict_feature_file:
             raise ValueError(
                 "If `do_predict` is True, then `predict_feature_file` must be "
