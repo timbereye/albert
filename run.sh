@@ -22,9 +22,8 @@ python3 run_squad_v2.py \
   --init_checkpoint=$init_checkpoint_gs \
   --vocab_file=$vocab_file_gs \
   --do_lower_case \
-  --max_seq_length=384 \
-  --doc_stride=128 \
-  --max_query_length=64 \
+  --max_seq_length=256 \
+  --doc_stride=64 \
   --do_train \
   --train_batch_size=40 \
   --predict_batch_size=40 \
@@ -35,4 +34,4 @@ python3 run_squad_v2.py \
   --n_best_size=20 \
   --max_answer_length=30 \
   --use_tpu \
-  --tpu_name="cx"
+  --tpu_name="z2"
