@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # Lint as: python2, python3
-"""Run ALBERT on SQuAD v2.0 using sentence piece tokenization."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -221,12 +220,12 @@ def main(_):
     validate_flags_or_throw(albert_config)
 
     tf.gfile.MakeDirs(FLAGS.output_dir)
-
-    tokenizer = fine_tuning_utils.create_vocab(
-        vocab_file=FLAGS.vocab_file,
-        do_lower_case=FLAGS.do_lower_case,
-        spm_model_file=FLAGS.spm_model_file,
-        hub_module=FLAGS.albert_hub_module_handle)
+    #
+    # tokenizer = fine_tuning_utils.create_vocab(
+    #     vocab_file=FLAGS.vocab_file,
+    #     do_lower_case=FLAGS.do_lower_case,
+    #     spm_model_file=FLAGS.spm_model_file,
+    #     hub_module=FLAGS.albert_hub_module_handle)
 
     tpu_cluster_resolver = None
     if FLAGS.use_tpu and FLAGS.tpu_name:
@@ -253,17 +252,25 @@ def main(_):
     train_examples = None
     num_train_steps = None
     num_warmup_steps = None
-    train_examples = squad_utils.read_squad_examples(
-        input_file=FLAGS.train_file, is_training=True)
+    if not tf.gfile.Exists(FLAGS.train_feature_file):
+        raise Exception("Train tf-record missed...")
+    cnt = 0
+    for _ in records:
+        cnt += 1
+    print(cnt)
     num_train_steps = int(
-        len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
+        cnt / FLAGS.train_batch_size * FLAGS.num_train_epochs)
+    # train_examples = squad_utils.read_squad_examples(
+    #     input_file=FLAGS.train_file, is_training=True)
+    # num_train_steps = int(
+    #     len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
     if FLAGS.do_train:
         num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
-
-        # Pre-shuffle the input to avoid having to make a very large shuffle
-        # buffer in in the `input_fn`.
-        rng = random.Random(12345)
-        rng.shuffle(train_examples)
+    #
+    #   # Pre-shuffle the input to avoid having to make a very large shuffle
+    #   # buffer in in the `input_fn`.
+    #   rng = random.Random(12345)
+    #   rng.shuffle(train_examples)
 
     model_fn = squad_utils.v2_model_fn_builder(
         albert_config=albert_config,
@@ -292,26 +299,26 @@ def main(_):
         # We write to a temporary file to avoid storing very large constant tensors
         # in memory.
 
-        if not tf.gfile.Exists(FLAGS.train_feature_file):
-            train_writer = squad_utils.FeatureWriter(
-                filename=os.path.join(FLAGS.train_feature_file), is_training=True)
-            squad_utils.convert_examples_to_features(
-                examples=train_examples,
-                tokenizer=tokenizer,
-                max_seq_length=FLAGS.max_seq_length,
-                doc_stride=FLAGS.doc_stride,
-                max_query_length=FLAGS.max_query_length,
-                is_training=True,
-                output_fn=train_writer.process_feature,
-                do_lower_case=FLAGS.do_lower_case)
-            train_writer.close()
+        # if not tf.gfile.Exists(FLAGS.train_feature_file):
+        #     train_writer = squad_utils.FeatureWriter(
+        #         filename=os.path.join(FLAGS.train_feature_file), is_training=True)
+        #     squad_utils.convert_examples_to_features(
+        #         examples=train_examples,
+        #         tokenizer=tokenizer,
+        #         max_seq_length=FLAGS.max_seq_length,
+        #         doc_stride=FLAGS.doc_stride,
+        #         max_query_length=FLAGS.max_query_length,
+        #         is_training=True,
+        #         output_fn=train_writer.process_feature,
+        #         do_lower_case=FLAGS.do_lower_case)
+        #     train_writer.close()
 
         tf.logging.info("***** Running training *****")
-        tf.logging.info("  Num orig examples = %d", len(train_examples))
+        # tf.logging.info("  Num orig examples = %d", len(train_examples))
         # tf.logging.info("  Num split examples = %d", train_writer.num_features)
         tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
         tf.logging.info("  Num steps = %d", num_train_steps)
-        del train_examples
+        # del train_examples
 
         train_input_fn = squad_utils.input_fn_builder(
             input_file=FLAGS.train_feature_file,
