@@ -661,12 +661,14 @@ def input_fn_builder(input_file, seq_length, is_training,
     }
     # p_mask is not required for SQuAD v1.1
     if is_v2:
-        name_to_features["p_mask"] = tf.FixedLenFeature([seq_length], tf.int64)
+        pass
+        # name_to_features["p_mask"] = tf.FixedLenFeature([seq_length], tf.int64)
 
     if is_training:
-        name_to_features["start_positions"] = tf.FixedLenFeature([], tf.int64)
-        name_to_features["end_positions"] = tf.FixedLenFeature([], tf.int64)
-        name_to_features["is_impossible"] = tf.FixedLenFeature([], tf.int64)
+        # name_to_features["start_positions"] = tf.FixedLenFeature([], tf.int64)
+        # name_to_features["end_positions"] = tf.FixedLenFeature([], tf.int64)
+        name_to_features["y_idx"] = tf.FixedLenFeature([seq_length], tf.int64)
+        name_to_features["has_answer"] = tf.FixedLenFeature([], tf.int64)
 
     def _decode_record(record, name_to_features):
         """Decodes a record to a TensorFlow example."""
@@ -694,7 +696,7 @@ def input_fn_builder(input_file, seq_length, is_training,
         d = tf.data.TFRecordDataset(input_file)
         if is_training:
             d = d.repeat()
-            d = d.shuffle(buffer_size=100)
+            d = d.shuffle(buffer_size=1000)
 
         d = d.apply(
             contrib_data.map_and_batch(
