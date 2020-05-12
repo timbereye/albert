@@ -37,6 +37,7 @@ import tensorflow.compat.v1 as tf
 from tensorflow.contrib import data as contrib_data
 from tensorflow.contrib import layers as contrib_layers
 from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib import crf as contrib_crf
 
 _PrelimPrediction = collections.namedtuple(  # pylint: disable=invalid-name
     "PrelimPrediction",
@@ -1539,7 +1540,7 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
 
         y_idx = features["y_idx"]
         seq_lengths = tf.fill([batch_size], seq_length)
-        crf_log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihoos(inputs=outputs["crf_logits"],
+        crf_log_likelihood, transition_params = contrib_crf.crf_log_likelihoos(inputs=outputs["crf_logits"],
                                                                                   tag_indices=y_idx,
                                                                                   sequence_lengths=seq_lengths)
         total_loss = -tf.reduce_mean(crf_log_likelihood)
