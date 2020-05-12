@@ -28,7 +28,7 @@ python3 run_extraction.py \
   --train_batch_size=40 \
   --predict_batch_size=40 \
   --learning_rate=2e-5 \
-  --num_train_epochs=2.0 \
+  --num_train_epochs=10.0 \
   --warmup_proportion=.1 \
   --save_checkpoints_steps=10000 \
   --n_best_size=20 \
