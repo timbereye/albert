@@ -332,10 +332,10 @@ def main(_):
         estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 
     if FLAGS.do_predict:
-        with tf.gfile.Open(FLAGS.predict_file) as predict_file:
-            prediction_json = json.load(predict_file)["data"]
-        eval_examples = squad_utils.read_squad_examples(
-            input_file=FLAGS.predict_file, is_training=False)
+        # with tf.gfile.Open(FLAGS.predict_file) as predict_file:
+        #     prediction_json = json.load(predict_file)["data"]
+        # eval_examples = squad_utils.read_squad_examples(
+        #     input_file=FLAGS.predict_file, is_training=False)
 
         if (tf.gfile.Exists(FLAGS.predict_feature_file) and tf.gfile.Exists(
                 FLAGS.predict_feature_left_file)):
@@ -343,31 +343,31 @@ def main(_):
                 FLAGS.predict_feature_left_file))
             with tf.gfile.Open(FLAGS.predict_feature_left_file, "rb") as fin:
                 eval_features = pickle.load(fin)
-        else:
-            eval_writer = squad_utils.FeatureWriter(
-                filename=FLAGS.predict_feature_file, is_training=False)
-            eval_features = []
-
-            def append_feature(feature):
-                eval_features.append(feature)
-                eval_writer.process_feature(feature)
-
-            squad_utils.convert_examples_to_features(
-                examples=eval_examples,
-                tokenizer=tokenizer,
-                max_seq_length=FLAGS.max_seq_length,
-                doc_stride=FLAGS.doc_stride,
-                max_query_length=FLAGS.max_query_length,
-                is_training=False,
-                output_fn=append_feature,
-                do_lower_case=FLAGS.do_lower_case)
-            eval_writer.close()
-
-            with tf.gfile.Open(FLAGS.predict_feature_left_file, "wb") as fout:
-                pickle.dump(eval_features, fout)
+        # else:
+        #     eval_writer = squad_utils.FeatureWriter(
+            #     filename=FLAGS.predict_feature_file, is_training=False)
+            # eval_features = []
+            #
+            # def append_feature(feature):
+            #     eval_features.append(feature)
+            #     eval_writer.process_feature(feature)
+            #
+            # squad_utils.convert_examples_to_features(
+            #     examples=eval_examples,
+            #     tokenizer=tokenizer,
+            #     max_seq_length=FLAGS.max_seq_length,
+            #     doc_stride=FLAGS.doc_stride,
+            #     max_query_length=FLAGS.max_query_length,
+            #     is_training=False,
+            #     output_fn=append_feature,
+            #     do_lower_case=FLAGS.do_lower_case)
+            # eval_writer.close()
+            #
+            # with tf.gfile.Open(FLAGS.predict_feature_left_file, "wb") as fout:
+            #     pickle.dump(eval_features, fout)
 
         tf.logging.info("***** Running predictions *****")
-        tf.logging.info("  Num orig examples = %d", len(eval_examples))
+        # tf.logging.info("  Num orig examples = %d", len(eval_examples))
         tf.logging.info("  Num split examples = %d", len(eval_features))
         tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
@@ -384,8 +384,6 @@ def main(_):
             """Evaluate the checkpoint on SQuAD v2.0."""
             # If running eval on the TPU, you will need to specify the number of
             # steps.
-            reader = tf.train.NewCheckpointReader(checkpoint)
-            global_step = reader.get_tensor(tf.GraphKeys.GLOBAL_STEP)
             all_results = []
             for result in estimator.predict(
                     predict_input_fn, yield_single_examples=True,
@@ -393,22 +391,14 @@ def main(_):
                 if len(all_results) % 1000 == 0:
                     tf.logging.info("Processing example: %d" % (len(all_results)))
                 unique_id = int(result["unique_ids"])
-                start_top_log_probs = (
-                    [float(x) for x in result["start_top_log_probs"].flat])
-                start_top_index = [int(x) for x in result["start_top_index"].flat]
-                end_top_log_probs = (
-                    [float(x) for x in result["end_top_log_probs"].flat])
-                end_top_index = [int(x) for x in result["end_top_index"].flat]
-
-                cls_logits = float(result["cls_logits"].flat[0])
+                crf_logits = result["crf_logits"]
+                transition_params = result["transition_params"]
                 all_results.append(
                     squad_utils.RawResultV2(
                         unique_id=unique_id,
-                        start_top_log_probs=start_top_log_probs,
-                        start_top_index=start_top_index,
-                        end_top_log_probs=end_top_log_probs,
-                        end_top_index=end_top_index,
-                        cls_logits=cls_logits))
+                        crf_logits=crf_logits,
+                        transition_params=transition_params,
+                    ))
 
             output_prediction_file = os.path.join(
                 FLAGS.output_dir, "predictions.json")
@@ -428,90 +418,10 @@ def main(_):
                 result_dict, cls_dict, prediction_json, eval_examples,
                 eval_features, all_results, FLAGS.n_best_size,
                 FLAGS.max_answer_length, output_prediction_file, output_nbest_file,
-                output_null_log_odds_file), int(global_step)
+                output_null_log_odds_file)
 
-        def _find_valid_cands(curr_step):
-            filenames = tf.gfile.ListDirectory(FLAGS.output_dir)
-            candidates = []
-            for filename in filenames:
-                if filename.endswith(".index"):
-                    ckpt_name = filename[:-6]
-                    idx = ckpt_name.split("-")[-1]
-                    if idx != "best" and int(idx) > curr_step:
-                        candidates.append(filename)
-            return candidates
-
-        output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-        checkpoint_path = os.path.join(FLAGS.output_dir, "model.ckpt-best")
-        key_name = "f1"
-        writer = tf.gfile.GFile(output_eval_file, "w")
-        if tf.gfile.Exists(checkpoint_path + ".index"):
-            result = get_result(checkpoint_path)
-            best_perf = result[0][key_name]
-            global_step = result[1]
-        else:
-            global_step = -1
-            best_perf = -1
-            checkpoint_path = None
-        while global_step < num_train_steps:
-            steps_and_files = {}
-            filenames = tf.gfile.ListDirectory(FLAGS.output_dir)
-            for filename in filenames:
-                if filename.endswith(".index"):
-                    ckpt_name = filename[:-6]
-                    cur_filename = os.path.join(FLAGS.output_dir, ckpt_name)
-                    if cur_filename.split("-")[-1] == "best":
-                        continue
-                    gstep = int(cur_filename.split("-")[-1])
-                    if gstep not in steps_and_files:
-                        tf.logging.info("Add {} to eval list.".format(cur_filename))
-                        steps_and_files[gstep] = cur_filename
-            tf.logging.info("found {} files.".format(len(steps_and_files)))
-            if not steps_and_files:
-                tf.logging.info("found 0 file, global step: {}. Sleeping."
-                                .format(global_step))
-                time.sleep(60)
-            else:
-                for ele in sorted(steps_and_files.items()):
-                    step, checkpoint_path = ele
-                    if global_step >= step:
-                        if len(_find_valid_cands(step)) > 1:
-                            for ext in ["meta", "data-00000-of-00001", "index"]:
-                                src_ckpt = checkpoint_path + ".{}".format(ext)
-                                tf.logging.info("removing {}".format(src_ckpt))
-                                tf.gfile.Remove(src_ckpt)
-                        continue
-                    result, global_step = get_result(checkpoint_path)
-                    tf.logging.info("***** Eval results *****")
-                    for key in sorted(result.keys()):
-                        tf.logging.info("  %s = %s", key, str(result[key]))
-                        writer.write("%s = %s\n" % (key, str(result[key])))
-                    if result[key_name] > best_perf:
-                        best_perf = result[key_name]
-                        for ext in ["meta", "data-00000-of-00001", "index"]:
-                            src_ckpt = checkpoint_path + ".{}".format(ext)
-                            tgt_ckpt = checkpoint_path.rsplit(
-                                "-", 1)[0] + "-best.{}".format(ext)
-                            tf.logging.info("saving {} to {}".format(src_ckpt, tgt_ckpt))
-                            tf.gfile.Copy(src_ckpt, tgt_ckpt, overwrite=True)
-                            writer.write("saved {} to {}\n".format(src_ckpt, tgt_ckpt))
-                    writer.write("best {} = {}\n".format(key_name, best_perf))
-                    tf.logging.info("  best {} = {}\n".format(key_name, best_perf))
-
-                    if len(_find_valid_cands(global_step)) > 2:
-                        for ext in ["meta", "data-00000-of-00001", "index"]:
-                            src_ckpt = checkpoint_path + ".{}".format(ext)
-                            tf.logging.info("removing {}".format(src_ckpt))
-                            tf.gfile.Remove(src_ckpt)
-                    writer.write("=" * 50 + "\n")
-
-        checkpoint_path = os.path.join(FLAGS.output_dir, "model.ckpt-best")
-        result, global_step = get_result(checkpoint_path)
-        tf.logging.info("***** Final Eval results *****")
-        for key in sorted(result.keys()):
-            tf.logging.info("  %s = %s", key, str(result[key]))
-            writer.write("%s = %s\n" % (key, str(result[key])))
-        writer.write("best perf happened at step: {}".format(global_step))
+        latest_checkpoint = tf.train.latest_checkpoint(FLAGS.output_dir)
+        get_result(latest_checkpoint)
 
 
 if __name__ == "__main__":

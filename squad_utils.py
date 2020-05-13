@@ -52,11 +52,13 @@ RawResult = collections.namedtuple("RawResult",
                                     "start_log_prob",
                                     "end_log_prob"])
 
+# RawResultV2 = collections.namedtuple(
+#     "RawResultV2",
+#     ["unique_id", "start_top_log_probs", "start_top_index",
+#      "end_top_log_probs", "end_top_index", "cls_logits"])
 RawResultV2 = collections.namedtuple(
     "RawResultV2",
-    ["unique_id", "start_top_log_probs", "start_top_index",
-     "end_top_log_probs", "end_top_index", "cls_logits"])
-
+    ["unique_id", "crf_logits", "transition_params"])
 
 class SquadExample(object):
     """A single training/test example for simple sequence classification.
@@ -105,33 +107,23 @@ class InputFeatures(object):
                  unique_id,
                  example_index,
                  doc_span_index,
-                 tok_start_to_orig_index,
-                 tok_end_to_orig_index,
-                 token_is_max_context,
                  tokens,
+                 token_to_orig_map,
+                 token_is_max_context,
                  input_ids,
                  input_mask,
                  segment_ids,
-                 paragraph_len,
-                 p_mask=None,
-                 start_position=None,
-                 end_position=None,
-                 is_impossible=None):
+                 y_idx=None):
         self.unique_id = unique_id
         self.example_index = example_index
         self.doc_span_index = doc_span_index
-        self.tok_start_to_orig_index = tok_start_to_orig_index
-        self.tok_end_to_orig_index = tok_end_to_orig_index
-        self.token_is_max_context = token_is_max_context
         self.tokens = tokens
+        self.token_to_orig_map = token_to_orig_map
+        self.token_is_max_context = token_is_max_context
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
-        self.paragraph_len = paragraph_len
-        self.start_position = start_position
-        self.end_position = end_position
-        self.is_impossible = is_impossible
-        self.p_mask = p_mask
+        self.y_idx = y_idx
 
 
 def read_squad_examples(input_file, is_training):
@@ -697,7 +689,7 @@ def input_fn_builder(input_file, seq_length, is_training,
         d = tf.data.TFRecordDataset(input_file)
         if is_training:
             d = d.repeat()
-            d = d.shuffle(buffer_size=1000)
+            d = d.shuffle(buffer_size=100)
 
         d = d.apply(
             contrib_data.map_and_batch(
@@ -1549,11 +1541,11 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
                                                                                   sequence_lengths=seq_lengths)
         total_loss = -tf.reduce_mean(crf_log_likelihood)
         if mode == tf.estimator.ModeKeys.TRAIN:
-            has_answer = tf.reshape(features["has_answer"], [-1])
-            regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                labels=tf.cast(has_answer, dtype=tf.float32), logits=outputs["verifier_logits"])
-            regression_loss = tf.reduce_mean(regression_loss)
-            total_loss += regression_loss
+            # has_answer = tf.reshape(features["has_answer"], [-1])
+            # regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            #     labels=tf.cast(has_answer, dtype=tf.float32), logits=outputs["verifier_logits"])
+            # regression_loss = tf.reduce_mean(regression_loss)
+            # total_loss += regression_loss
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
@@ -1566,10 +1558,12 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
         elif mode == tf.estimator.ModeKeys.PREDICT:
             transition_params_expand = tf.expand_dims(transition_params, 0)
             transition_params_tile = tf.tile(transition_params_expand, [batch_size, 1, 1])
+            softmax = tf.nn.softmax(outputs["crf_logits"])
             predictions = {
                 "unique_ids": features["unique_ids"],
                 "crf_logits": outputs["crf_logits"],
-                "transition_params": transition_params_tile
+                "transition_params": transition_params_tile,
+                "softmax": softmax
             }
             output_spec = contrib_tpu.TPUEstimatorSpec(
                 mode=mode, predictions=predictions, scaffold_fn=scaffold_fn)
@@ -1623,3 +1617,92 @@ def evaluate_v2(result_dict, cls_dict, prediction_json, eval_examples,
     out_eval = make_eval_dict(exact_thresh, f1_thresh)
     out_eval["null_score_diff_threshold"] = null_score_diff_threshold
     return out_eval
+
+
+def write_predictions_et(all_examples, all_features, all_results, tokenizer, max_seq_length, tag_info):
+    example_index_to_features = collections.defaultdict(list)
+    for feature in all_features:
+        example_index_to_features[feature.example_index].append(feature)
+
+    unique_id_to_result = {}
+    for result in all_results:
+        unique_id_to_result[result.unique_id] = result
+
+    PrelimPrediction = collections.namedtuple(
+        "PrelimPrediction",
+        ["feature_index", "start_indexes", "end_indexes", "scores", "types"]
+    )
+    predictions = collections.OrderedDict()
+    for (_, example) in enumerate(all_examples):
+        example_index = example.example_index
+        features = example_index_to_features[example_index]
+        _prelim_predictions = []
+        for (feature_index, feature) in enumerate(features):
+            result = unique_id_to_result[feature.unique_id]
+            zipped_scores_and_positions, y_idx_pred = _get_best_indexes(result.crf_logits, result.softmax, result.transition_params,
+                                                                        max_seq_length, tag_info.id_to_tag)
+            start_indexes = []
+            end_indexes = []
+            scores = []
+            types = []
+            for score, positions, type in zipped_scores_and_positions:
+                start_index = positions[0]
+                end_index = positions[1]
+                if start_index >= len(feature.tokens):
+                    continue
+                if end_index >= len(feature.tokens):
+                    continue
+                if start_index not in feature.token_to_origin_map:
+                    continue
+                start_indexes.append(start_index)
+                end_indexes.append(end_index)
+                scores.append(score)
+                types.append(type)
+            _prelim_predictions.append(
+                PrelimPrediction(
+                    feature_index=feature_index,
+                    start_indexes=start_indexes,
+                    end_indexes=end_indexes,
+                    scores=scores,
+                    types=types
+                )
+            )
+
+        NbestPrediction = collections.namedtuple(
+            "NbestPrediction", ["texts", "scores", "start_indexes", "end_indexes", "types"]
+        )
+        seen_predictions = {}
+        nbest = []
+        for pred in _prelim_predictions:
+            texts = []
+            start_indexes_orig = []
+            end_indexes_orig = []
+            answers_num = len(pred.start_indexes)
+            feature = features[pred.feature_index]
+            for i in range(answers_num):
+                orig_doc_start = feature.token_to_orig_map[pred.start_indexes[i]]
+                try:
+                    orig_doc_end = feature.token_to_orig_map[pred.end_indexes[i] + 1] - 1
+                except:
+                    orig_doc_end = feature.token_to_orig_map[pred.end_indexes[i]] + \
+                        len(feature.tokens[pred.end_indexes[i]].replace("##", "")) - 1
+                final_text = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
+                texts.append(final_text)
+                start_indexes_orig.append(orig_doc_start)
+                end_indexes_orig.append(orig_doc_end)
+
+            if texts:
+                texts_raw = "|".join([x.strip() for x in texts])
+                if texts_raw in seen_predictions:
+                    continue
+                seen_predictions[texts_raw] = True
+                nbest.append(NbestPrediction(
+                    texts=texts,
+                    scores=pred.scores,
+                    start_indexes=start_indexes_orig,
+                    end_indexes=end_indexes_orig,
+                    types=pred.types
+                ))
+        final_entry = None
+        max_score = -10000.0
+        
