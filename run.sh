@@ -1,16 +1,17 @@
 #!/bin/bash
-output_root="gs://squad_c/albert_et"
+data_root="gs://squad_c/albert_et"
 pretrained_models="gs://squad_c/pretrained_models/albert_xxlarge_chinese"
 albert_config_file_gs=$pretrained_models"/albert_config.json"
-output_dir_gs=$output_root"/output"
+output_dir_gs=$data_root"/output"
 train_file_gs=""
 predict_file_gs=""
-train_feature_file_gs=$output_root"/features/tf.record.train.1"
-predict_feature_left_file_gs=$output_root"/features/tf.record.test.1"
-predict_feature_left_file_gs=$output_root"/features/features.pkl.1"
-predict_example_file_gs=$output_root"/features/examples.pkl.1"
+train_feature_file_gs=$data_root"/features/tf.record.train.1"
+predict_feature_left_file_gs=$data_root"/features/tf.record.test.1"
+predict_feature_left_file_gs=$data_root"/features/features.pkl.1"
+predict_example_file_gs=$data_root"/features/examples.pkl.1"
 init_checkpoint_gs=$pretrained_models"/model.ckpt-best"
 vocab_file_gs=$pretrained_models"/vocab_chinese.txt"
+tag_info_file_gs=$data_root"/features/tag_info.yaml.1"
 export PYTHONPATH="../":$PYTHONPATH
 python3 run_extraction.py \
   --albert_config_file=$albert_config_file_gs \
