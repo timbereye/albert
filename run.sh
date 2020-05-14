@@ -36,4 +36,5 @@ python3 run_extraction.py \
   --n_best_size=20 \
   --max_answer_length=30 \
   --use_tpu \
-  --tpu_name="z2"
+  --tpu_name="z2" \
+  --tag_info_file=$tag_info_file_gs
