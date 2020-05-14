@@ -1457,11 +1457,9 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
     shapes = modeling.get_shape_list(output)
     batch_size = shapes[0]
     print("tag nums:", len(tag_info.tag_to_id))
-    crf_logits = tf.layers.dense(output, len(tag_info.tag_to_id), kernel_initializer=modeling.create_initializer(
-                albert_config.initializer_range))
+    crf_logits = tf.layers.dense(output, len(tag_info.tag_to_id), kernel_initializer=modeling.create_initializer(0.02))
     final_hidden_reshape = tf.reshape(output, [batch_size, -1])
-    verifier_logits = tf.layers.dense(final_hidden_reshape, 1, kernel_initializer=modeling.create_initializer(
-        albert_config.initializer_range))
+    verifier_logits = tf.layers.dense(final_hidden_reshape, 1, kernel_initializer=modeling.create_initializer(0.02))
     verifier_logits = tf.squeeze(verifier_logits, -1)
     return_dict["crf_logits"] = crf_logits
     if is_training:
