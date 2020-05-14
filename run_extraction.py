@@ -76,6 +76,11 @@ flags.DEFINE_string(
     "If it does exist, it will be read.")
 
 flags.DEFINE_string(
+    "predict_example_file", None,
+    "Location of predict examples. If it doesn't exist, it will be written. "
+    "If it does exist, it will be read.")
+
+flags.DEFINE_string(
     "predict_feature_left_file", None,
     "Location of predict features not passed to TPU. If it doesn't exist, it "
     "will be written. If it does exist, it will be read.")
@@ -176,6 +181,12 @@ flags.DEFINE_integer("end_n_top", 5, "beam size for the end positions.")
 
 flags.DEFINE_float("dropout_prob", 0.1, "dropout probability.")
 
+flags.DEFINE_bool("do_part1", False, "Event extraction part1 or not")
+
+flags.DEFINE_bool("do_part2", False, "Event extraction part2 or not")
+
+flags.DEFINE_string("tag_info_file", None, "tag info file.")
+
 
 def validate_flags_or_throw(albert_config):
     """Validate the input FLAGS or throw an exception."""
@@ -273,6 +284,8 @@ def main(_):
     #   rng = random.Random(12345)
     #   rng.shuffle(train_examples)
 
+    tag_info = squad_utils.TagInfo.load(FLAGS.tag_info_file)
+
     model_fn = squad_utils.v2_model_fn_builder(
         albert_config=albert_config,
         init_checkpoint=FLAGS.init_checkpoint,
@@ -285,7 +298,8 @@ def main(_):
         start_n_top=FLAGS.start_n_top,
         end_n_top=FLAGS.end_n_top,
         dropout_prob=FLAGS.dropout_prob,
-        hub_module=FLAGS.albert_hub_module_handle)
+        hub_module=FLAGS.albert_hub_module_handle,
+        tag_info=tag_info)
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
     # or GPU.
@@ -332,17 +346,20 @@ def main(_):
         estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 
     if FLAGS.do_predict:
+        import dill
         # with tf.gfile.Open(FLAGS.predict_file) as predict_file:
         #     prediction_json = json.load(predict_file)["data"]
         # eval_examples = squad_utils.read_squad_examples(
         #     input_file=FLAGS.predict_file, is_training=False)
 
         if (tf.gfile.Exists(FLAGS.predict_feature_file) and tf.gfile.Exists(
-                FLAGS.predict_feature_left_file)):
+                FLAGS.predict_feature_left_file) and tf.gfile.Exists(FLAGS.predict_example_file)):
             tf.logging.info("Loading eval features from {}".format(
                 FLAGS.predict_feature_left_file))
             with tf.gfile.Open(FLAGS.predict_feature_left_file, "rb") as fin:
-                eval_features = pickle.load(fin)
+                eval_features = dill.load(fin)
+            with tf.gfile.Open(FLAGS.predict_example_file, "rb") as fin:
+                eval_examples = dill.load(fin)
         # else:
         #     eval_writer = squad_utils.FeatureWriter(
             #     filename=FLAGS.predict_feature_file, is_training=False)
@@ -367,7 +384,7 @@ def main(_):
             #     pickle.dump(eval_features, fout)
 
         tf.logging.info("***** Running predictions *****")
-        # tf.logging.info("  Num orig examples = %d", len(eval_examples))
+        tf.logging.info("  Num orig examples = %d", len(eval_examples))
         tf.logging.info("  Num split examples = %d", len(eval_features))
         tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
@@ -402,23 +419,12 @@ def main(_):
 
             output_prediction_file = os.path.join(
                 FLAGS.output_dir, "predictions.json")
-            output_nbest_file = os.path.join(
-                FLAGS.output_dir, "nbest_predictions.json")
-            output_null_log_odds_file = os.path.join(
-                FLAGS.output_dir, "null_odds.json")
 
-            result_dict = {}
-            cls_dict = {}
-            squad_utils.accumulate_predictions_v2(
-                result_dict, cls_dict, eval_examples, eval_features,
-                all_results, FLAGS.n_best_size, FLAGS.max_answer_length,
-                FLAGS.start_n_top, FLAGS.end_n_top)
+            predictions = squad_utils.write_predictions_et(eval_examples, eval_features, all_results,
+                                                           FLAGS.max_answer_length, tag_info)
 
-            return squad_utils.evaluate_v2(
-                result_dict, cls_dict, prediction_json, eval_examples,
-                eval_features, all_results, FLAGS.n_best_size,
-                FLAGS.max_answer_length, output_prediction_file, output_nbest_file,
-                output_null_log_odds_file)
+            with tf.gfile.Open(output_prediction_file, 'w') as f:
+                json.dump(predictions, f)
 
         latest_checkpoint = tf.train.latest_checkpoint(FLAGS.output_dir)
         get_result(latest_checkpoint)

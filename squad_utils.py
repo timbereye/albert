@@ -1441,7 +1441,7 @@ def write_predictions_v2(result_dict, cls_dict, all_examples, all_features,
 def create_v2_model(albert_config, is_training, input_ids, input_mask,
                     segment_ids, use_one_hot_embeddings, features,
                     max_seq_length, start_n_top, end_n_top, dropout_prob,
-                    hub_module):
+                    hub_module, tag_info):
     """Creates a classification model."""
     (_, output) = fine_tuning_utils.create_albert(
         albert_config=albert_config,
@@ -1457,7 +1457,7 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
     shapes = modeling.get_shape_list(output)
     batch_size = shapes[0]
 
-    crf_logits = tf.layers.dense(output, 5, kernel_initializer=modeling.create_initializer(
+    crf_logits = tf.layers.dense(output, len(tag_info.tag_to_id), kernel_initializer=modeling.create_initializer(
                 albert_config.initializer_range))
     final_hidden_reshape = tf.reshape(output, [batch_size, -1])
     verifier_logits = tf.layers.dense(final_hidden_reshape, 1, kernel_initializer=modeling.create_initializer(
@@ -1473,7 +1473,7 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
 def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
                         num_train_steps, num_warmup_steps, use_tpu,
                         use_one_hot_embeddings, max_seq_length, start_n_top,
-                        end_n_top, dropout_prob, hub_module):
+                        end_n_top, dropout_prob, hub_module, tag_info):
     """Returns `model_fn` closure for TPUEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -1502,7 +1502,8 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
             start_n_top=start_n_top,
             end_n_top=end_n_top,
             dropout_prob=dropout_prob,
-            hub_module=hub_module)
+            hub_module=hub_module,
+            tag_info=tag_info)
 
         tvars = tf.trainable_variables()
 
@@ -1537,15 +1538,15 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
         y_idx = features["y_idx"]
         seq_lengths = tf.fill([batch_size], seq_length)
         crf_log_likelihood, transition_params = contrib_crf.crf_log_likelihood(inputs=outputs["crf_logits"],
-                                                                                  tag_indices=y_idx,
-                                                                                  sequence_lengths=seq_lengths)
+                                                                               tag_indices=y_idx,
+                                                                               sequence_lengths=seq_lengths)
         total_loss = -tf.reduce_mean(crf_log_likelihood)
         if mode == tf.estimator.ModeKeys.TRAIN:
-            # has_answer = tf.reshape(features["has_answer"], [-1])
-            # regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-            #     labels=tf.cast(has_answer, dtype=tf.float32), logits=outputs["verifier_logits"])
-            # regression_loss = tf.reduce_mean(regression_loss)
-            # total_loss += regression_loss
+            has_answer = tf.reshape(features["has_answer"], [-1])
+            regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.cast(has_answer, dtype=tf.float32), logits=outputs["verifier_logits"])
+            regression_loss = tf.reduce_mean(regression_loss)
+            total_loss += regression_loss
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
@@ -1619,7 +1620,27 @@ def evaluate_v2(result_dict, cls_dict, prediction_json, eval_examples,
     return out_eval
 
 
-def write_predictions_et(all_examples, all_features, all_results, tokenizer, max_seq_length, tag_info):
+import yaml
+
+
+class TagInfo(object):
+    def __init__(self, id_to_tag, tag_to_id, is_multiple_dct, center_question="CENTER"):
+        self.id_to_tag = id_to_tag
+        self.tag_to_id = tag_to_id
+        self.is_multiple_dct = is_multiple_dct
+        self.center_question = center_question
+
+    def dump(self, filename):
+        with tf.gfile.Open(filename, "w") as f:
+            yaml.dump(self, f)
+
+    @classmethod
+    def load(cls, filename):
+        with tf.gfile.Open(filename, 'r') as f:
+            return yaml.load(f)
+
+
+def write_predictions_et(all_examples, all_features, all_results, max_seq_length, tag_info):
     example_index_to_features = collections.defaultdict(list)
     for feature in all_features:
         example_index_to_features[feature.example_index].append(feature)
@@ -1705,4 +1726,131 @@ def write_predictions_et(all_examples, all_features, all_results, tokenizer, max
                 ))
         final_entry = None
         max_score = -10000.0
-        
+        for (i, entry) in enumerate(nbest):
+            score = sum(entry.scores)
+            if score > max_score:
+                final_entry = entry
+                max_score = score
+
+        answers_dct = collections.defaultdict(lambda :[])
+        if final_entry:
+            for text, start, end, score, type in zip(final_entry.texts, final_entry.start_indexes, final_entry.end_indexes,
+                                                     final_entry.scores, final_entry.types):
+                answers_dct[type].append({"text":text, "start":start, "end":end, "score":score})
+
+        output = {}
+        for type, answers_info in answers_dct.items():
+            is_multiple = tag_info.is_multiple_dct.get(type, False)
+            if is_multiple:
+                output[type] = answers_info
+            else:
+                answers_info = sorted(answers_info, key=lambda x: x["score"], reverse=True)
+                output[type] = answers_info[:1]
+        predictions[example.key] = output
+    return predictions
+
+
+def _get_best_indexes(logits, softmax, trans, max_seq_length, idx2label_dict):
+    def get_answer(y_value, max_seq_length, logits, idx2label_dict):
+        tags = []
+        score_list = []
+        position_list = []
+        type_list = []
+        answer_indexes = ""
+        score = 0.0
+        pos = -1
+
+        for i, id in enumerate(y_value):
+            tags.append(idx2label_dict[id])
+        len_common = len(y_value)
+        if logits is None:
+            logits = [[1] * len(idx2label_dict)] * len_common
+        index = -1
+        last_type = None
+        for tag, logit, y in zip(tags, logits, y_value):
+            index += 1
+            if tag[0] == "S":
+                if len(answer_indexes) > 0:
+                    score_list.append(score)
+                    position_list.append([pos, pos + len(answer_indexes.strip().split(" ")) - 1])
+                    type_list.append(last_type)
+                answer_indexes = ""
+                score = 0
+                pos = -1
+                score_list.append(logit[y])
+                position_list.append([index, index])
+                type_list.append(tag[2:])
+                last_type = None
+            elif tag[0] == 'B':
+                if len(answer_indexes) > 0:
+                    score_list.append(score)
+                    position_list.append([pos, pos + len(answer_indexes.strip().split(" ")) - 1])
+                    type_list.append(last_type)
+                answer_indexes = str(index)
+                pos = index
+                score = logit[y]
+                last_type = tag[2:]
+            elif tag[0] == 'M':
+                if pos == -1:
+                    pos = index
+                if last_type is None or last_type == tag[2:]:
+                    answer_indexes += " " + str(index)
+                    score += logit[y]
+                    last_type = tag[2:]
+                elif len(answer_indexes) > 0:
+                    score_list.append(score)
+                    position_list.append([pos, pos + len(answer_indexes.strip().split(" ")) - 1])
+                    type_list.append(last_type)
+                    answer_indexes = str(index)
+                    pos = index
+                    score = logit[y]
+                    last_type = tag[2:]
+            elif tag[0] == 'E':
+                if pos == -1:
+                    pos = index
+                if last_type is None or last_type == tag[2:]:
+                    answer_indexes += " " + str(index)
+                    score_list.append(score + logit[y])
+                    position_list.append([pos, pos + len(answer_indexes.strip().split(" ")) - 1])
+                    type_list.append(tag[2:])
+                elif len(answer_indexes) > 0:
+                    score_list.append(score)
+                    position_list.append([pos, pos + len(answer_indexes.strip().split(" ")) - 1])
+                    type_list.append(last_type)
+                    score_list.append(logit[y])
+                    position_list.append([index, index])
+                    type_list.append(tag[2:])
+                answer_indexes = ""
+                score = 0
+                pos = -1
+                last_type = None
+            else:
+                if len(answer_indexes) > 0:
+                    score_list.append(score)
+                    position_list.append([pos, pos + len(answer_indexes.strip().split(" ")) - 1])
+                    type_list.append(last_type)
+                answer_indexes = ""
+                score = 0
+                pos = -1
+                last_type = None
+        return score_list, position_list, type_list
+
+    from tensorflow.contrib.crf import viterbi_decode
+
+    y_idx_pred, _ = viterbi_decode(logits, trans)
+    score_list, position_list, type_list = get_answer(y_idx_pred, max_seq_length, softmax, idx2label_dict)
+    zipped_list = zip(score_list, position_list, type_list)
+    zipped_list_sorted = sorted(zipped_list, key=lambda x:x[0], reverse=True)
+    y_idx_p = []
+    for i in y_idx_pred:
+        y_idx_p.append(i)
+    return zipped_list_sorted, y_idx_p
+
+class ExtractionExample(object):
+    def __init__(self, key, example_index, doc_tokens, center_word=None, answers_dct=None):
+        self.key = key
+        self.example_index = example_index
+        self.doc_tokens = doc_tokens
+        self.center_word = center_word
+        self.answers_dct = answers_dct
+
