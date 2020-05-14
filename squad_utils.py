@@ -1506,12 +1506,13 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
             tag_info=tag_info)
 
         tvars = tf.trainable_variables()
-
+        print("trainable variables:", tvars)
         initialized_variable_names = {}
         scaffold_fn = None
         if init_checkpoint:
             (assignment_map, initialized_variable_names
              ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
+            print("assignment_map:", assignment_map)
             if use_tpu:
 
                 def tpu_scaffold():
