@@ -6,7 +6,7 @@ output_dir_gs=$data_root"/output"
 train_file_gs=""
 predict_file_gs=""
 train_feature_file_gs=$data_root"/features/tf.record.train.1"
-predict_feature_left_file_gs=$data_root"/features/tf.record.test.1"
+predict_feature_file_gs=$data_root"/features/tf.record.test.1"
 predict_feature_left_file_gs=$data_root"/features/features.pkl.1"
 predict_example_file_gs=$data_root"/features/examples.pkl.1"
 init_checkpoint_gs=$pretrained_models"/model.ckpt-best"
@@ -21,6 +21,7 @@ python3 run_extraction.py \
   --train_feature_file=$train_feature_file_gs \
   --predict_feature_file=$predict_feature_file_gs \
   --predict_feature_left_file=$predict_feature_left_file_gs \
+  --predict_example_file=$predict_example_file_gs \
   --init_checkpoint=$init_checkpoint_gs \
   --vocab_file=$vocab_file_gs \
   --do_lower_case \
@@ -29,7 +30,7 @@ python3 run_extraction.py \
   --do_train \
   --train_batch_size=40 \
   --predict_batch_size=40 \
-  --learning_rate=5e-5 \
+  --learning_rate=5e-6 \
   --num_train_epochs=8.0 \
   --warmup_proportion=.1 \
   --save_checkpoints_steps=10000 \
