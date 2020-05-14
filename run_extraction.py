@@ -285,7 +285,7 @@ def main(_):
     #   rng.shuffle(train_examples)
 
     tag_info = squad_utils.TagInfo.load(FLAGS.tag_info_file)
-    print(tag_info)
+    print(tag_info.__dict__)
 
     model_fn = squad_utils.v2_model_fn_builder(
         albert_config=albert_config,
