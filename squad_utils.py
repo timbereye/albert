@@ -1456,7 +1456,7 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
     return_dict = {}
     shapes = modeling.get_shape_list(output)
     batch_size = shapes[0]
-
+    print("tag nums:", len(tag_info.tag_to_id))
     crf_logits = tf.layers.dense(output, len(tag_info.tag_to_id), kernel_initializer=modeling.create_initializer(
                 albert_config.initializer_range))
     final_hidden_reshape = tf.reshape(output, [batch_size, -1])
@@ -1542,11 +1542,11 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
                                                                                sequence_lengths=seq_lengths)
         total_loss = -tf.reduce_mean(crf_log_likelihood)
         if mode == tf.estimator.ModeKeys.TRAIN:
-            has_answer = tf.reshape(features["has_answer"], [-1])
-            regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                labels=tf.cast(has_answer, dtype=tf.float32), logits=outputs["verifier_logits"])
-            regression_loss = tf.reduce_mean(regression_loss)
-            total_loss += regression_loss
+            # has_answer = tf.reshape(features["has_answer"], [-1])
+            # regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            #     labels=tf.cast(has_answer, dtype=tf.float32), logits=outputs["verifier_logits"])
+            # regression_loss = tf.reduce_mean(regression_loss)
+            # total_loss += regression_loss
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
@@ -1845,6 +1845,14 @@ def _get_best_indexes(logits, softmax, trans, max_seq_length, idx2label_dict):
     for i in y_idx_pred:
         y_idx_p.append(i)
     return zipped_list_sorted, y_idx_p
+
+
+class TextAndPos(object):
+    def __init__(self, text, start, end):
+        self.text = text
+        self.start = start
+        self.end = end
+
 
 class ExtractionExample(object):
     def __init__(self, key, example_index, doc_tokens, center_word=None, answers_dct=None):
