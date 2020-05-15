@@ -426,8 +426,20 @@ def main(_):
             predictions = squad_utils.write_predictions_et(eval_examples, eval_features, all_results,
                                                            FLAGS.max_answer_length, tag_info)
 
+            import numpy
+            class MyEncoder(json.JSONEncoder):
+                def default(self, o):
+                    if isinstance(o, numpy.integer):
+                        return int(o)
+                    if isinstance(o, numpy.floating):
+                        return float(o)
+                    if isinstance(o, numpy.ndarray):
+                        return o.tolist()
+                    else:
+                        return super(MyEncoder, self).default(o)
+
             with tf.gfile.Open(output_prediction_file, 'w') as f:
-                json.dump(predictions, f)
+                json.dump(predictions, f, ensure_ascii=False, cls=MyEncoder)
 
         latest_checkpoint = tf.train.latest_checkpoint(FLAGS.output_dir)
         get_result(latest_checkpoint)
