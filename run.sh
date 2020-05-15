@@ -30,7 +30,7 @@ python3 run_extraction.py \
   --do_train \
   --train_batch_size=40 \
   --predict_batch_size=40 \
-  --learning_rate=1e-4 \
+  --learning_rate=5e-6 \
   --num_train_epochs=8.0 \
   --warmup_proportion=.1 \
   --save_checkpoints_steps=10000 \
