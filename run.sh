@@ -28,8 +28,8 @@ python3 run_extraction.py \
   --max_seq_length=256 \
   --doc_stride=64 \
   --do_train \
-  --train_batch_size=40 \
-  --predict_batch_size=40 \
+  --train_batch_size=8 \
+  --predict_batch_size=8 \
   --learning_rate=5e-5 \
   --num_train_epochs=8.0 \
   --warmup_proportion=.1 \
