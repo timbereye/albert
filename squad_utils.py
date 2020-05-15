@@ -1454,13 +1454,35 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
         hub_module=hub_module)
 
     return_dict = {}
-    shapes = modeling.get_shape_list(output)
-    batch_size = shapes[0]
-    print("tag nums:", len(tag_info.tag_to_id))
-    crf_logits = tf.layers.dense(output, len(tag_info.tag_to_id), kernel_initializer=modeling.create_initializer(0.02))
-    # final_hidden_reshape = tf.reshape(output, [batch_size, -1])
-    # verifier_logits = tf.layers.dense(final_hidden_reshape, 1, kernel_initializer=modeling.create_initializer(0.02))
-    # verifier_logits = tf.squeeze(verifier_logits, -1)
+    # shapes = modeling.get_shape_list(output)
+    # batch_size = shapes[0]
+    # print("tag nums:", len(tag_info.tag_to_id))
+    # crf_logits = tf.layers.dense(output, len(tag_info.tag_to_id), kernel_initializer=modeling.create_initializer(0.02))
+    # # final_hidden_reshape = tf.reshape(output, [batch_size, -1])
+    # # verifier_logits = tf.layers.dense(final_hidden_reshape, 1, kernel_initializer=modeling.create_initializer(0.02))
+    # # verifier_logits = tf.squeeze(verifier_logits, -1)
+
+    final_hidden = output
+    num_tags = len(tag_info.tag_to_id)
+    final_hidden_shape = modeling.get_shape_list(final_hidden, expected_rank=3)
+    batch_size = final_hidden_shape[0]
+    seq_length = final_hidden_shape[1]
+    hidden_size = final_hidden_shape[2]
+
+    output_weights = tf.get_variable(
+        "output_weights", [num_tags, hidden_size],
+        initializer=tf.truncated_normal_initializer(stddev=0.02))
+
+    output_bias = tf.get_variable(
+        "output_bias", [num_tags], initializer=tf.zeros_initializer())
+
+    final_hidden_matrix = tf.reshape(final_hidden,
+                                     [batch_size * seq_length, hidden_size])
+    logits = tf.matmul(final_hidden_matrix, output_weights, transpose_b=True)
+    logits = tf.nn.bias_add(logits, output_bias)
+
+    crf_logits = tf.reshape(logits, [batch_size, seq_length, num_tags])
+
     return_dict["crf_logits"] = crf_logits
     # if is_training:
     #     return_dict["verifier_logits"] = verifier_logits
