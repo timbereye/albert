@@ -1669,7 +1669,7 @@ def write_predictions_et(all_examples, all_features, all_results, max_seq_length
                     continue
                 if end_index >= len(feature.tokens):
                     continue
-                if start_index not in feature.token_to_origin_map:
+                if start_index not in feature.token_to_orig_map:
                     continue
                 start_indexes.append(start_index)
                 end_indexes.append(end_index)
