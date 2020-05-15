@@ -276,8 +276,8 @@ def main(_):
     #     input_file=FLAGS.train_file, is_training=True)
     # num_train_steps = int(
     #     len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
-    # if FLAGS.do_train:
-    #     num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
+    if FLAGS.do_train:
+        num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
     #
     #   # Pre-shuffle the input to avoid having to make a very large shuffle
     #   # buffer in in the `input_fn`.
