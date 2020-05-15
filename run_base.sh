@@ -28,14 +28,15 @@ python3 run_extraction.py \
   --max_seq_length=256 \
   --doc_stride=64 \
   --do_train \
+  --do_predict \
   --train_batch_size=40 \
   --predict_batch_size=40 \
   --learning_rate=5e-5 \
-  --num_train_epochs=8.0 \
+  --num_train_epochs=16.0 \
   --warmup_proportion=.1 \
   --save_checkpoints_steps=10000 \
   --n_best_size=20 \
   --max_answer_length=30 \
   --use_tpu \
-  --tpu_name="z2" \
+  --tpu_name="grpc://10.41.96.194:8470" \
   --tag_info_file=$tag_info_file_gs

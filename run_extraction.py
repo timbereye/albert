@@ -411,10 +411,12 @@ def main(_):
                 unique_id = int(result["unique_ids"])
                 crf_logits = result["crf_logits"]
                 transition_params = result["transition_params"]
+                softmax = result["softmax"]
                 all_results.append(
                     squad_utils.RawResultV2(
                         unique_id=unique_id,
                         crf_logits=crf_logits,
+                        softmax=softmax,
                         transition_params=transition_params,
                     ))
 
