@@ -181,8 +181,6 @@ flags.DEFINE_integer("end_n_top", 5, "beam size for the end positions.")
 
 flags.DEFINE_float("dropout_prob", 0.1, "dropout probability.")
 
-flags.DEFINE_bool("do_part1", False, "Event extraction part1 or not")
-
 flags.DEFINE_bool("do_part2", False, "Event extraction part2 or not")
 
 flags.DEFINE_string("tag_info_file", None, "tag info file.")
