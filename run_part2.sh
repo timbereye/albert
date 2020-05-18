@@ -28,6 +28,7 @@ python3 run_extraction.py \
   --max_seq_length=256 \
   --doc_stride=64 \
   --do_train \
+  --do_predict \
   --train_batch_size=40 \
   --predict_batch_size=40 \
   --learning_rate=5e-5 \
