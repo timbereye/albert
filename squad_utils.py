@@ -1460,12 +1460,12 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
     batch_size = shapes[0]
     print("tag nums:", len(tag_info.tag_to_id))
     crf_logits = tf.layers.dense(output, len(tag_info.tag_to_id))
-    final_hidden_reshape = tf.reshape(output, [batch_size, -1])
-    verifier_logits = tf.layers.dense(final_hidden_reshape, 1)
-    verifier_logits = tf.squeeze(verifier_logits, -1)
-    return_dict["crf_logits"] = crf_logits
-    if is_training:
-        return_dict["verifier_logits"] = verifier_logits
+    # final_hidden_reshape = tf.reshape(output, [batch_size, -1])
+    # verifier_logits = tf.layers.dense(final_hidden_reshape, 1)
+    # verifier_logits = tf.squeeze(verifier_logits, -1)
+    # return_dict["crf_logits"] = crf_logits
+    # if is_training:
+    #     return_dict["verifier_logits"] = verifier_logits
 
     return return_dict
 
@@ -1541,11 +1541,11 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
                                                                                sequence_lengths=seq_lengths)
         total_loss = -tf.reduce_mean(crf_log_likelihood)
         if mode == tf.estimator.ModeKeys.TRAIN:
-            has_answer = tf.reshape(features["has_answer"], [-1])
-            regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                labels=tf.cast(has_answer, dtype=tf.float32), logits=outputs["verifier_logits"])
-            regression_loss = tf.reduce_mean(regression_loss)
-            total_loss += regression_loss
+            # has_answer = tf.reshape(features["has_answer"], [-1])
+            # regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            #     labels=tf.cast(has_answer, dtype=tf.float32), logits=outputs["verifier_logits"])
+            # regression_loss = tf.reduce_mean(regression_loss)
+            # total_loss += regression_loss
 
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
