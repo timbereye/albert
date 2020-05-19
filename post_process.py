@@ -64,9 +64,10 @@ def process(test_file, output_file, pred_part1_file=None, pred_part2_file=None, 
                         center_word_start = center_word["start"]
                         center_word_end = center_word["end"]
                         key_new = str(key) + "$$" + str(index)
-                        output_json = {"id": key_new, "text": text, "event_type": event_type, "center_word": {"start": center_word_start,
-                                                                                     "end": center_word_end,
-                                                                                     "text": center_word_text}}
+                        output_json = {"id": key_new, "text": text + "[SEP]" + event_type, "event_type": event_type,
+                                       "center_word": {"start": center_word_start,
+                                                       "end": center_word_end,
+                                                       "text": center_word_text}}
                         fo.write(json.dumps(output_json, ensure_ascii=False) + "\n")
                         index += 1
                 else:

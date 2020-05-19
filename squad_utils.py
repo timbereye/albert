@@ -1443,6 +1443,8 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
                     max_seq_length, start_n_top, end_n_top, dropout_prob,
                     hub_module, tag_info):
     """Creates a classification model."""
+    albert_config.hidden_dropout_prob = 0.1
+    albert_config.attention_probs_dropout_prob = 0.1
     (_, output) = fine_tuning_utils.create_albert(
         albert_config=albert_config,
         is_training=is_training,
