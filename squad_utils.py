@@ -567,16 +567,16 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
     return cur_span_index == best_span_index
 
 
-def _get_best_indexes(logits, n_best_size):
-    """Get the n-best logits from a list."""
-    index_and_score = sorted(enumerate(logits), key=lambda x: x[1], reverse=True)
-
-    best_indexes = []
-    for i in range(len(index_and_score)):
-        if i >= n_best_size:
-            break
-        best_indexes.append(index_and_score[i][0])
-    return best_indexes
+# def _get_best_indexes(logits, n_best_size):
+#     """Get the n-best logits from a list."""
+#     index_and_score = sorted(enumerate(logits), key=lambda x: x[1], reverse=True)
+#
+#     best_indexes = []
+#     for i in range(len(index_and_score)):
+#         if i >= n_best_size:
+#             break
+#         best_indexes.append(index_and_score[i][0])
+#     return best_indexes
 
 
 def _compute_softmax(scores):
@@ -1837,6 +1837,8 @@ def _get_best_indexes(logits, softmax, trans, max_seq_length, idx2label_dict):
 
     y_idx_pred, _ = viterbi_decode(logits, trans)
     score_list, position_list, type_list = get_answer(y_idx_pred, max_seq_length, softmax, idx2label_dict)
+    if not position_list:
+        print(y_idx_pred)
     zipped_list = zip(score_list, position_list, type_list)
     zipped_list_sorted = sorted(zipped_list, key=lambda x:x[0], reverse=True)
     y_idx_p = []
