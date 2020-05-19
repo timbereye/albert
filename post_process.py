@@ -33,8 +33,8 @@ def process(test_file, output_file, pred_part1_file=None, pred_part2_file=None, 
                         if part2_result:
                             arguments = []
                             for role, info in part2_result.items():
-                                assert len(info) == 1, print(part2_result)
-                                argument = info[0]["text"]
+                                info_sorted = sorted(info, key=lambda x:x["score"], reverse=True)
+                                argument = info_sorted[0]["text"]
                                 arguments.append({"role": role, "argument": argument})
                             event_list.append({"event_type": event_type, "arguments": arguments})
                         else:
