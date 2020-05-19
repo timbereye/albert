@@ -1463,7 +1463,7 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
     # final_hidden_reshape = tf.reshape(output, [batch_size, -1])
     # verifier_logits = tf.layers.dense(final_hidden_reshape, 1)
     # verifier_logits = tf.squeeze(verifier_logits, -1)
-    # return_dict["crf_logits"] = crf_logits
+    return_dict["crf_logits"] = crf_logits
     # if is_training:
     #     return_dict["verifier_logits"] = verifier_logits
 
