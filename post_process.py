@@ -15,7 +15,7 @@ def process(test_file, output_file, pred_part1_file=None, pred_part2_file=None, 
             event_type_dct = {}
             for pred1 in fp1:
                 pred1_data = json.loads(pred1)
-                key = pred1["id"]
+                key = pred1_data["id"]
                 event_type = pred1_data["event_type"]
                 event_type_dct[key] = event_type
             pred_part2_data = json.load(fp2)
